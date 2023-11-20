@@ -6,6 +6,8 @@ rootfs="rootfs"
 rootfs_img=$PWD"/rootfs_img"
 
 make LLVM=1
+
+#exit
 echo $base_path
 if [ ! -d $rootfs ]; then
     mkdir $rootfs

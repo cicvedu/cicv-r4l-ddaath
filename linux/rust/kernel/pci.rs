@@ -293,6 +293,10 @@ impl Device {
             Ok(())
         }
     }
+    ///get ptr to pci_dev                                                                      
+    pub fn as_ptr(&self) -> *mut bindings::pci_dev {                                            
+                self.ptr                                                                               
+    }
 
     /// iter PCI Resouces
     pub fn iter_resource(&self) -> impl Iterator<Item = Resource> + '_ {
@@ -327,6 +331,11 @@ impl Device {
     pub fn map_resource(&self, resource: &Resource, len: usize) -> Result<MappedResource> {
         MappedResource::try_new(resource.start, len)
     }
+
+    /// release region
+    pub fn release_selected_regions(&mut self, bars: i32) {                                                 
+            unsafe { bindings::pci_release_selected_regions(self.ptr, bars) };                      
+    }  
 }
 
 unsafe impl device::RawDevice for Device {

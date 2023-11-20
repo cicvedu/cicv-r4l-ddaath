@@ -5,16 +5,18 @@
 #![allow(unused)]
 
 use core::iter::Iterator;
+use crate::bindings::dev_get_drvdata;
+use crate::bindings::free_irq; 
 use core::sync::atomic::AtomicPtr;
 
 use kernel::pci::Resource;
 use kernel::prelude::*;
-use kernel::sync::Arc;
+use kernel::sync::{Arc,Mutex};
 use kernel::{pci, device, driver, bindings, net, dma, c_str};
 use kernel::device::RawDevice;
 use kernel::sync::SpinLock;
-
-
+use core::ops::Deref;
+use core::ffi::c_void;
 
 mod consts;
 mod hw_defs;
@@ -27,7 +29,6 @@ use ring_buf::{RxRingBuf, TxRingBuf};
 use e1000_ops::E1000Ops;
 
 use consts::*;
-
 
 module! {
     type: E1000KernelMod,
@@ -293,11 +294,16 @@ impl kernel::irq::Handler for E1000InterruptHandler {
 /// the private data for the adapter
 struct E1000DrvPrvData {
     _netdev_reg: net::Registration<NetDevice>,
+    bars:i32,
+    dev_ptr: *mut bindings::pci_dev,
 }
 
+unsafe impl Send for E1000DrvPrvData {}
+unsafe impl Sync for E1000DrvPrvData {}
 impl driver::DeviceRemoval for E1000DrvPrvData {
     fn device_remove(&self) {
         pr_info!("Rust for linux e1000 driver demo (device_remove)\n");
+         drop(&self._netdev_reg);
     }
 }
 
@@ -462,12 +468,30 @@ impl pci::Driver for E1000Drv {
             E1000DrvPrvData{
                 // Must hold this registration, or the device will be removed.
                 _netdev_reg: netdev_reg,
+                bars,
+                dev_ptr: dev.as_ptr(),
             }
         )?)
     }
 
     fn remove(data: &Self::Data) {
         pr_info!("Rust for linux e1000 driver demo (remove)\n");
+
+        let netdev = data._netdev_reg.dev_get();
+        let dev    = netdev.deref();
+        //let irq = dev.irq();
+        let bars = data.bars;
+        let pcidev_ptr = data.dev_ptr;
+        let netdev_reg = &data._netdev_reg;
+
+        unsafe { bindings::pci_release_selected_regions(data.dev_ptr, bars) };   
+        unsafe { bindings::pci_disable_device(pcidev_ptr) };
+       //unsafe { bindings::free_irq(irq, data) };
+        drop(netdev_reg);
+
+        drop(data);
+        
+
     }
 }
 struct E1000KernelMod {
