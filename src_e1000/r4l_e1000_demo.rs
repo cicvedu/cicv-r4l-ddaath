@@ -192,6 +192,21 @@ impl net::DeviceOperations for NetDevice {
 
     fn stop(_dev: &net::Device, _data: &NetDevicePrvData) -> Result {
         pr_info!("Rust for linux e1000 driver demo (net device stop)\n");
+        NetDevice::e1000_recycle_tx_queue(&_dev, &_data);
+         *_data.tx_ring.lock() = None;
+          *_data.rx_ring.lock() = None;
+
+          unsafe {
+                  let ptr = Box::from_raw(
+                    _data
+                    ._irq_handler
+                    .load(core::sync::atomic::Ordering::Relaxed),
+                    );
+                      }
+
+          _dev.netif_carrier_off();
+          _dev.netif_stop_queue();
+          _data.napi.disable();
         Ok(())
     }
 
@@ -483,7 +498,7 @@ impl pci::Driver for E1000Drv {
         let bars = data.bars;
         let pcidev_ptr = data.dev_ptr;
         let netdev_reg = &data._netdev_reg;
-
+        unsafe {bindings::pci_clear_master(pcidev_ptr);}
         unsafe { bindings::pci_release_selected_regions(data.dev_ptr, bars) };   
         unsafe { bindings::pci_disable_device(pcidev_ptr) };
        //unsafe { bindings::free_irq(irq, data) };
